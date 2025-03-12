@@ -85,45 +85,54 @@ const InventoryApp = () => {
   }, []);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+  
+    // Permitir apenas números no campo "patrimonio"
+    if (name === "patrimonio" && !/^\d*$/.test(value)) {
+      return; // Ignora entrada inválida
+    }
+  
+    setForm({ ...form, [name]: value });
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-
-    // Verifica se o número de série ou patrimônio já existe no IndexedDB
+  
     const existingItem = items.find(item => item.numeroSerie === form.numeroSerie || item.patrimonio === form.patrimonio);
     if (existingItem && !editingItem) {
       setErrorMessage("Número de série ou patrimônio já cadastrados.");
       return;
     }
-
-    // Atualiza o item no caso de edição, ou adiciona um novo item
+  
     const newItems = editingItem
       ? items.map((item) => item.numeroSerie === editingItem.numeroSerie ? form : item)
       : [...items, form];
-
+  
     setItems(newItems);
-
-    // Salva o item no IndexedDB
-    addItemToDB(form)
-      .then(() => {
-        setForm({
-          marca: "",
-          numeroSerie: "",
-          patrimonio: "",
-          modelo: "",
-          ram: "",
-          processador: "",
-          placaMae: "",
-          armazenamento: "",
-          local: "",
-        });
-        setEditingItem(null); // Limpa o estado de edição
-        setErrorMessage(""); // Limpar a mensagem de erro, se houver
-      })
-      .catch((error) => setErrorMessage("Erro ao adicionar item no IndexedDB"));
-  };
+  
+    try {
+      await addItemToDB(form);
+      await sendToMonkeySheets(form);  // 🔥 Enviando os dados para a planilha!
+  
+      setForm({
+        marca: "",
+        numeroSerie: "",
+        patrimonio: "",
+        modelo: "",
+        ram: "",
+        processador: "",
+        placaMae: "",
+        armazenamento: "",
+        local: "",
+      });
+  
+      setEditingItem(null);
+      setErrorMessage("");
+  
+    } catch (error) {
+      setErrorMessage("Erro ao adicionar item no IndexedDB ou enviar para o Monkey Sheets.");
+    }
+  };  
 
   const handleEdit = (item) => {
     setForm(item);
@@ -252,6 +261,27 @@ const InventoryApp = () => {
       </ul>
     </div>
   );
+};
+
+
+const sendToMonkeySheets = async (item) => {
+  try {
+    const response = await fetch("https://api.sheetmonkey.io/form/SqJf49vmGQyC9qe8iMvpn", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(item)
+    });
+
+    if (!response.ok) {
+      throw new Error("Erro ao enviar os dados para o Monkey Sheets.");
+    }
+    
+    console.log("Dados enviados com sucesso para a planilha!");
+  } catch (error) {
+    console.error(error);
+  }
 };
 
 export default InventoryApp;
